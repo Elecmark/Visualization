@@ -1,0 +1,99 @@
+import { createStore } from 'vuex';
+import * as d3 from 'd3';
+
+export default createStore({
+    state: {
+        students: [],
+        selectedStudentScores: {},
+        averageScores: {},  // 存储每个学期的平均成绩
+        majorScores: {},    // 存储各专业各学期的平均成绩
+        selectedMajor: null, // 被选中的专业
+        selectedStudentId: null,
+        selectedStudentMajor: null,
+        selectedStudentGender: null,
+        selectedStudentMaxTerm: null,
+        selectedStudentMaxScore: null,
+        selectedStudentMinTerm: null,
+        selectedStudentMinScore: null,
+        selectedStudentAvgScore: null
+    },
+    mutations: {
+        SET_STUDENTS(state, payload) {
+            state.students = payload;
+        },
+        SET_AVERAGE_SCORES(state, payload) {
+            state.averageScores = payload;
+        },
+        setSelectedStudent(state, { studentId, studentMajor, studentGender, maxTerm, maxScore, minTerm, minScore, avgScore }) {
+            state.selectedStudentId = studentId;
+            state.selectedStudentMajor = studentMajor;
+            state.selectedStudentGender = studentGender;
+            state.selectedStudentMaxTerm = maxTerm;
+            state.selectedStudentMaxScore = maxScore;
+            state.selectedStudentMinTerm = minTerm;
+            state.selectedStudentMinScore = minScore;
+            state.selectedStudentAvgScore = avgScore;
+        },
+        setSelectedStudentScores(state, scores) {
+            state.selectedStudentScores = scores;
+        },
+        SET_MAJOR_SCORES(state, payload) {
+            state.majorScores = payload;
+        },
+        setSelectedMajor(state, major) {
+            state.selectedMajor = major;
+        }
+    },
+    actions: {
+        fetchStudents({ commit }) {
+            d3.json('/json/2012级各学期成绩.json').then(data => {
+                commit('SET_STUDENTS', data);
+                const termScores = {};
+                const majorTermScores = {};
+
+                // 构建每个学期的成绩数组
+                data.forEach(student => {
+                    Object.keys(student).forEach(key => {
+                        if (key.match(/^\d{5}$/)) {
+                            if (!termScores[key]) {
+                                termScores[key] = [];
+                            }
+                            termScores[key].push(student[key]);
+
+                            // 为每个专业的每个学期准备数据结构
+                            const major = student['专业'];
+                            if (!majorTermScores[major]) {
+                                majorTermScores[major] = {};
+                            }
+                            if (!majorTermScores[major][key]) {
+                                majorTermScores[major][key] = [];
+                            }
+                            majorTermScores[major][key].push(student[key]);
+                        }
+                    });
+                });
+
+                // 计算每个学期的平均成绩
+                const averageScores = {};
+                Object.keys(termScores).forEach(term => {
+                    const total = termScores[term].reduce((acc, score) => acc + score, 0);
+                    const average = total / termScores[term].length;
+                    averageScores[term] = parseFloat(average.toFixed(2));
+                });
+                commit('SET_AVERAGE_SCORES', averageScores);
+
+                // 计算每个专业每个学期的平均成绩
+                const majorScores = {};
+                Object.keys(majorTermScores).forEach(major => {
+                    majorScores[major] = {};
+                    Object.keys(majorTermScores[major]).forEach(term => {
+                        const total = majorTermScores[major][term].reduce((acc, score) => acc + score, 0);
+                        const average = total / majorTermScores[major][term].length;
+                        majorScores[major][term] = parseFloat(average.toFixed(2));
+                    });
+                });
+                commit('SET_MAJOR_SCORES', majorScores);
+            }).catch(error => console.error('Error loading the data:', error));
+        }
+    }
+});

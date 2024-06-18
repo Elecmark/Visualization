@@ -1,0 +1,412 @@
+<template>
+  <div class="china-container">
+    <div class="timeline-container">
+      <h2>{{ selectedYear }}级各省份生源信息</h2>
+      <div class="legend">
+        <div v-for="legend in legends" :key="legend.color" class="legend-item">
+          <span :style="{ backgroundColor: legend.color }" class="legend-color"></span>
+          <span>{{ legend.label }}</span>
+        </div>
+      </div>
+      <input type="range" v-model="year" @input="updateYear" min="2008" max="2012" step="1" list="tickmarks" />
+      <datalist id="tickmarks">
+        <option v-for="year in years" :key="year" :value="year">{{ year }}</option>
+      </datalist>
+    </div>
+    <canvas id="canvas" width="1000" height="1000"></canvas>
+    <div id="tooltip"></div>
+  </div>
+</template>
+
+<script>
+import { mapState, mapActions } from 'vuex';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import * as d3 from 'd3-geo';
+
+export default {
+  data() {
+    return {
+      year: 2008, // 默认年份
+      years: [2008, 2009, 2010, 2011, 2012], // 刻度显示的年份
+      legends: [
+        { color: 'rgba(255, 0, 0, 0.8)', label: '> 6%' },
+        { color: 'rgba(255, 100, 0, 0.8)', label: '> 5% - 6%' },
+        { color: 'rgba(255, 140, 0, 0.8)', label: '> 4% - 5%' },
+        { color: 'rgba(255, 215, 0, 0.8)', label: '> 3% - 4%' },
+        { color: 'rgba(255, 255, 0, 0.8)', label: '> 2% - 3%' },
+        { color: 'rgba(0, 255, 0, 0.8)', label: '> 1% - 2%' },
+        { color: 'rgba(0, 191, 255, 0.8)', label: '≤ 1%' }
+      ]
+    };
+  },
+  computed: {
+    ...mapState(['selectedYear']),
+  },
+  watch: {
+    selectedYear(newYear) {
+      this.year = newYear; // 更新滑块位置
+    }
+  },
+  methods: {
+    ...mapActions(['updateSelectedYear']),
+    updateYear() {
+      this.updateSelectedYear(this.year);
+      console.log('Timeline这里变了:', this.year);
+    },
+  },
+  created() {
+    this.year = this.selectedYear; // 初始化年份
+    this.initChinaMap();
+  },
+  initChinaMap() {
+    new ChinaMap(this.$store);
+  }
+};
+
+class ChinaMap {
+  constructor(store) {
+    this.store = store;
+    this.selectedYear = this.store.state.selectedYear; // 从 Vuex 获取初始年份
+
+    this.store.watch(
+        (state) => state.selectedYear,
+        (newYear) => {
+          console.log('Selected year changed to:', newYear);
+          this.selectedYear = newYear;
+          this.reloadMapData(); // 当年份改变时，重新加载地图数据
+        }
+    );
+
+    this.store.dispatch('processProvinceData'); // 确保调用此 Vuex action 来加载和处理数据
+    this.store.dispatch('calculateHeatData').then(() => {
+      this.init();
+      this.loadMapData(); // 仅在数据处理完毕后加载地图数据
+      this.setupWatchers(); // 设置观察者
+    }).catch(error => {
+      console.error('Error initializing data:', error);
+    });
+  }
+
+  setupWatchers() {
+    // 确保状态和数据同步
+    this.store.watch((state) => state.provinceHeatData, (newData) => {
+      // 当热力图数据更新时重新加载地图数据或重新应用颜色
+      console.log('HTML here changed:', this.selectedYear);
+      this.updateColors(newData);
+    });
+  }
+
+  init() {
+    // 第一步新建一个场景
+    this.scene = new THREE.Scene();
+    this.activeInstersect = [];
+    this.setRenderer();
+    this.setCamera();
+    this.setController();
+    this.setRaycaster();
+    this.animate();
+  }
+
+  // 加载地图数据
+  loadMapData() {
+    const loader = new THREE.FileLoader();
+    loader.load('/json/china.json', (data) => {
+      const jsondata = JSON.parse(data);
+      const provinceHeatData = this.store.state.provinceHeatData;
+      this.generateGeometry(jsondata, provinceHeatData, this.selectedYear);
+    });
+  }
+
+  reloadMapData() {
+    if (this.map) {
+      this.scene.remove(this.map); // 移除当前地图
+    }
+    this.loadMapData(); // 重新加载地图数据
+  }
+
+  generateGeometry(jsondata, provinceHeatData, selectedYear) {
+    // 初始化一个地图对象
+    this.map = new THREE.Object3D();
+    // 墨卡托投影转换
+    const projection = d3
+        .geoMercator()
+        .center([104.0, 37.5])
+        .translate([0, 0]);
+
+    jsondata.features.forEach((elem) => {
+      const province = new THREE.Object3D();
+      const provinceName = elem.properties.name;
+      const yearData = provinceHeatData[selectedYear] || {};
+      const heatColor = yearData[provinceName] || 'rgba(128, 128, 128, 0.8)'; // 使用默认颜色作为备选
+
+      const coordinates = elem.geometry.coordinates;
+      coordinates.forEach((multiPolygon) => {
+        multiPolygon.forEach((polygon) => {
+          const shape = new THREE.Shape();
+          const lineMaterial = new THREE.LineBasicMaterial({
+            color: 'white',
+          });
+          const lineGeometry = new THREE.Geometry();
+
+          for (let i = 0; i < polygon.length; i++) {
+            const [x, y] = projection(polygon[i]);
+            if (i === 0) {
+              shape.moveTo(x, -y);
+            }
+            shape.lineTo(x, -y);
+            lineGeometry.vertices.push(new THREE.Vector3(x, -y, 1));
+          }
+
+          const geometry = new THREE.ExtrudeGeometry(shape, {
+            steps: 2,
+            depth: 1,
+            bevelEnabled: false
+          });
+
+          // 解析rgba颜色
+          const rgba = heatColor.match(/rgba\((\d+), (\d+), (\d+), (\d+(\.\d+)?)\)/);
+          const color = new THREE.Color(`rgb(${rgba[1]}, ${rgba[2]}, ${rgba[3]})`);
+          const opacity = parseFloat(rgba[4]);
+
+          const material = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: opacity,
+          });
+
+          const mesh = new THREE.Mesh(geometry, material);
+          const line = new THREE.Line(lineGeometry, lineMaterial);
+
+          // 设置边界线不参与射线检测
+          line.raycast = function() {};
+
+          province.properties = elem.properties;
+          province.add(mesh);
+          province.add(line);
+        });
+      });
+      this.map.add(province);
+    });
+    this.scene.add(this.map);
+  }
+
+  updateColors(newData) {
+    if (!this.map) return;
+
+    this.map.children.forEach((province) => {
+      const provinceName = province.properties.name;
+      const yearData = newData[this.selectedYear] || {};
+      const heatColor = yearData[provinceName] || 'gray'; // 使用默认颜色作为备选
+
+      province.children.forEach((child) => {
+        if (child.material) {
+          child.material.color.set(heatColor);
+        }
+      });
+    });
+  }
+
+  setController() {
+    this.controller = new OrbitControls(
+        this.camera,
+        document.getElementById('canvas')
+    );
+  }
+
+  addCube() {
+    const geometry = new THREE.BoxGeometry();
+    const material = new THREE.MeshBasicMaterial({ color: 0x50ff22 });
+    this.cube = new THREE.Mesh(geometry, material);
+    this.scene.add(this.cube);
+  }
+
+  addHelper() {
+    const helper = new THREE.CameraHelper(this.camera);
+    this.scene.add(helper);
+  }
+
+  // 新建透视相机
+  setCamera() {
+    // 第二参数就是 长度和宽度比 默认采用浏览器  返回以像素为单位的窗口的内部宽度和高度
+    this.camera = new THREE.PerspectiveCamera(
+        75,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
+    );
+    this.camera.position.set(0, 0, 120);
+    this.camera.lookAt(this.scene.position);
+  }
+
+  setRaycaster() {
+    this.raycaster = new THREE.Raycaster();
+    this.mouse = new THREE.Vector2();
+    this.tooltip = document.getElementById('tooltip');
+    const onMouseMove = (event) => {
+      this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      this.tooltip.style.left = event.clientX + 2 + 'px';
+      this.tooltip.style.top = event.clientY + 2 + 'px';
+    };
+
+    window.addEventListener('mousemove', onMouseMove, false);
+  }
+
+  // 设置渲染器
+  setRenderer() {
+    this.renderer = new THREE.WebGLRenderer({
+      canvas: document.getElementById('canvas'),
+    });
+    this.renderer.setPixelRatio(window.devicePixelRatio);
+    // 设置画布的大小
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  // 设置环境光
+  setLight() {
+    let ambientLight = new THREE.AmbientLight(0xffffff); // 环境光
+    this.scene.add(ambientLight);
+  }
+
+  render() {
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  animate() {
+    requestAnimationFrame(this.animate.bind(this));
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+
+    if (intersects.length > 0) {
+      if (!this.lastPick || this.lastPick.object !== intersects[0].object) {
+        if (this.lastPick) {
+          // 增加亮度来恢复颜色
+          this.lastPick.object.material.color.multiplyScalar(1 / 0.8);
+        }
+        this.lastPick = intersects[0];
+        // 减少亮度来变暗
+        this.lastPick.object.material.color.multiplyScalar(0.8);
+        this.showTip();
+      }
+    } else if (this.lastPick) {
+      // 没有对象被选中，增加亮度恢复颜色并隐藏提示
+      this.lastPick.object.material.color.multiplyScalar(1 / 0.8);
+      this.tooltip.style.visibility = 'hidden';
+      this.lastPick = null;
+    }
+
+    this.render();
+  }
+
+  showTip() {
+    if (this.lastPick) {
+      const properties = this.lastPick.object.parent.properties;
+      const provinceName = properties.name; // 省份名称
+
+      // 检查省份名称是否为空
+      if (!provinceName) {
+        this.tooltip.style.visibility = 'hidden';
+        return;
+      }
+
+      if (this.store.state.provinceStats[provinceName] && this.store.state.provinceStats[provinceName][this.selectedYear]) {
+        const provinceStats = this.store.state.provinceStats[provinceName][this.selectedYear];
+        const totalStudents = this.store.state.totalStudentsByYear[this.selectedYear] || 1; // 防止除以0
+        const studentPercentage = ((provinceStats.count || 0) / totalStudents * 100).toFixed(2);
+        const ranking = this.store.state.rankings[provinceName] && this.store.state.rankings[provinceName][this.selectedYear] ? this.store.state.rankings[provinceName][this.selectedYear] : 'N/A';
+
+        const info = `
+          <div>省份名称: ${provinceName}</div>
+          <div>生源人数: ${provinceStats.count || '数据不足'} 个学生</div>
+          <div>生源占比: ${studentPercentage}%</div>
+          <div>男女比例: ${provinceStats.genderRatio || '未知'}</div>
+          <div>平均成绩: ${(provinceStats.averageScore || 0).toFixed(2)}</div>
+          <div>成绩排名: ${ranking}</div>
+        `;
+        this.tooltip.innerHTML = info;
+        this.tooltip.style.visibility = 'visible';
+      } else {
+        this.tooltip.innerHTML = `<div>省份: ${provinceName}</div><div>数据不足</div>`;
+        this.tooltip.style.visibility = 'visible';
+      }
+    }
+  }
+}
+</script>
+
+<style scoped>
+.china-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  height: 100%;
+  font-size: 16px;
+}
+
+.timeline-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  height: 100%;
+  font-size: 16px;
+}
+
+h2 {
+  margin-bottom: 10px;
+}
+
+.legend {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin: 0 10px;
+}
+
+.legend-color {
+  width: 20px;
+  height: 20px;
+  display: inline-block;
+  margin-right: 5px;
+}
+
+input[type="range"] {
+  width: 80%;
+  margin: 20px 0;
+}
+
+datalist {
+  display: flex;
+  justify-content: space-between;
+  width: 80%;
+}
+
+option {
+  text-align: center;
+}
+
+html body {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+#tooltip {
+  position: absolute;
+  z-index: 2;
+  background: white;
+  padding: 10px;
+  border-radius: 2px;
+  visibility: hidden;
+  text-align: center;  /* 添加文本居中样式 */
+}
+</style>
