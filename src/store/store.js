@@ -1,7 +1,12 @@
 import { createStore } from 'vuex';
 import * as d3 from 'd3';
+import transfer from './transfer';
 
 export default createStore({
+    modules: {
+        transfer,
+        // 其他模块继续在这里添加...
+    },
     state: {
         students: [],
         selectedStudentScores: {},

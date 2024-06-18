@@ -18,10 +18,10 @@
 </template>
 
 <script>
-import Panel1 from '../../public/Pdh/Panel1.vue';
-import Panel2 from '../../public/Pdh/Panel2.vue';
-import Panel3 from '../../public/Pdh/Panel3.vue';
-import Timeline from '../../public/Pdh/Timeline.vue';
+import Panel1 from '../../public/Pdh/Pdh_Panel1.vue';
+import Panel2 from '../../public/Pdh/Pdh_Panel2.vue';
+import Panel3 from '../../public/Pdh/Pdh_Panel3.vue';
+import Timeline from '../../public/Pdh/Pdh_Timeline.vue';
 import { mapState, mapActions } from 'vuex';
 
 export default {

@@ -1,12 +1,18 @@
 <template>
   <div class="timeline-container">
     <h2>{{ selectedYear }}级各省份生源信息</h2>
+
+    <h5>某省生源占{{ selectedYear }}级全部生源的百分比图例：</h5>
+
     <div class="legend">
       <div v-for="legend in legends" :key="legend.color" class="legend-item">
         <span :style="{ backgroundColor: legend.color }" class="legend-color"></span>
         <span>{{ legend.label }}</span>
       </div>
     </div>
+
+    <div>时间轴调节：</div>
+
     <input type="range" v-model="year" @input="updateYear" min="2008" max="2012" step="1" list="tickmarks" />
     <datalist id="tickmarks">
       <option v-for="year in years" :key="year" :value="year">{{ year }}</option>
@@ -72,7 +78,7 @@ h2 {
 .legend {
   display: flex;
   justify-content: center;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
 }
 
 .legend-item {

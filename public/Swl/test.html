@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>d3-弦图</title>
+    <style>
+        svg {
+            box-shadow: 0 0 8px 0 rgb(226, 226, 226);
+            border-radius: 4px;
+        }
+        body {
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+    </style>
+</head>
+
+<body>
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script src="./utils.js"></script>
+<script>
+    const width = 800
+    const height = 800
+    const colors = d3.schemeSet3
+    const nodesNum = 12
+
+    const outerR = Math.min(width, height) / 2 - 100
+    const innerR = outerR - 10
+    const padAngle = 2 * Math.PI / 200
+
+    const matrix = new Array(nodesNum).fill(0).map(
+        () => new Array(nodesNum).fill(0).map(() => Math.random() * 100 >>> 0 )
+    )
+
+    const chords = d3.chord()
+        .padAngle(padAngle)
+        (matrix)
+
+    const svg = createSvg(width, height)
+    drawGroups() // 绘制节点
+    drawChords() // 绘制弦图
+    drawTicks()
+    drawLabels()
+
+    function drawGroups() {
+        const groups = chords.groups // 节点数组
+        const maxVal = d3.max(groups, d => d.value)
+
+        const arc = d3.arc()
+            .innerRadius(innerR)
+            .outerRadius(outerR)
+
+        svg.append('g')
+            .attr('class', 'groups')
+            .selectAll('g')
+            .data(groups)
+            .enter()
+            .append('g')
+            .attr('class', 'group')
+            .append('path')
+            .attr('d', d => {
+                return arc(d)
+            })
+            .attr('fill', (_, i) => colors[i])
+    }
+
+    function drawChords() {
+        const ribbon = d3.ribbon()
+            .radius(innerR - 20)
+
+        svg.append('g')
+            .attr('class', 'chord')
+            .selectAll('path')
+            .data(chords)
+            .enter()
+            .append('path')
+            .attr('d', ribbon)
+            .attr('fill', ({ source: { index } }) => colors[index])
+            .attr('stroke', ({ source: { index } }) => d3.rgb(colors[index]).darker())
+            .on('mouseover', function ({ source: { index } }, i) {
+                d3.select(this)
+                    .attr('fill', d3.rgb(colors[index]).darker())
+            })
+            .on('mouseout', function ({ source: { index } }) {
+                d3.select(this)
+                    .attr('fill', colors[index])
+            })
+    }
+
+    function drawTicks() {
+        d3.selectAll('.group')
+            .append('g')
+            .attr('class', 'ticks')
+            .selectAll('line')
+            .data(d => {
+                const {
+                    value,
+                    startAngle,
+                    endAngle
+                } = d
+                const k = (endAngle - startAngle) / value
+
+                return d3.range(0, value, 100).map(value => ({
+                    text: value,
+                    angle: d.startAngle + value * k,
+                }))
+            })
+            .enter()
+            .append('g')
+            .call(createRadialTicks)
+    }
+
+    function drawLabels() {
+        svg.append('g')
+            .selectAll('text')
+            .data(chords.groups)
+            .enter()
+            .append('g')
+            .call(setAttr, {
+                fill: (_, i) => colors[i],
+                transform: d => {
+                    const deg = rotateAngle(d)
+                    return `
+                            rotate(${ deg - 90 })
+                            translate(${ outerR + 30 }, 0)
+                        `
+                }
+            })
+            .append('text')
+            .attr('dominant-baseline', 'middle')
+            .text((_, i) => `node${ i + 1 }`)
+            .call(setAttr, {
+                transform: function (d) {
+                    const deg = rotateAngle(d)
+
+                    return deg > 180
+                        ? `
+                                rotate(180)
+                                translate(${ -this.getBBox().width }, 0)
+                            `
+                        : ''
+                }
+            })
+    }
+
+    // 文本旋转角度
+    function rotateAngle(d) {
+        return tsRadian2angle( (d.startAngle + d.endAngle) / 2 )
+    }
+</script>
+
+</body>
+
+</html>
