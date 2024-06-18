@@ -62,8 +62,7 @@
             // 添加消息监听器
             window.addEventListener('message', (event) => {
                 if (event.data.type === 'yearChanged') {
-                    const newYear = event.data.year;
-                    this.selectedYear = newYear;
+                    this.selectedYear = event.data.year;
                     this.reloadMapData(); // 当年份改变时，重新加载地图数据
                 }
             });
@@ -81,7 +80,6 @@
         init() {
             // 第一步新建一个场景
             this.scene = new THREE.Scene();
-            this.activeInstersect = [];
             this.setRenderer();
             this.setCamera();
             this.setController();
@@ -224,19 +222,6 @@
                 document.getElementById('canvas')
             );
         }
-
-        addCube() {
-            const geometry = new THREE.BoxGeometry();
-            const material = new THREE.MeshBasicMaterial({ color: 0x50ff22 });
-            this.cube = new THREE.Mesh(geometry, material);
-            this.scene.add(this.cube);
-        }
-
-        addHelper() {
-            const helper = new THREE.CameraHelper(this.camera);
-            this.scene.add(helper);
-        }
-
         // 新建透视相机
         setCamera() {
             // 第二参数就是 长度和宽度比 默认采用浏览器  返回以像素为单位的窗口的内部宽度和高度
@@ -272,12 +257,6 @@
             this.renderer.setPixelRatio(window.devicePixelRatio);
             // 设置画布的大小
             this.renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        // 设置环境光
-        setLight() {
-            let ambientLight = new THREE.AmbientLight(0xffffff); // 环境光
-            this.scene.add(ambientLight);
         }
 
         render() {
@@ -328,7 +307,7 @@
                     const ranking = this.store.state.rankings[provinceName] && this.store.state.rankings[provinceName][this.selectedYear] ? this.store.state.rankings[provinceName][this.selectedYear] : 'N/A';
 
 
-                    const info = `
+                    this.tooltip.innerHTML = `
                 <div>省份名称: ${provinceName}</div>
                 <div>生源人数: ${provinceStats.count || '数据不足'} 个学生</div>
                 <div>生源占比: ${studentPercentage}%</div>
@@ -336,7 +315,6 @@
                 <div>平均成绩: ${(provinceStats.averageScore || 0).toFixed(2)}</div>
                 <div>成绩排名: ${ranking}</div>
             `;
-                    this.tooltip.innerHTML = info;
                     this.tooltip.style.visibility = 'visible';
                 } else {
                     this.tooltip.innerHTML = `<div>省份: ${provinceName}</div><div>数据不足</div>`;
