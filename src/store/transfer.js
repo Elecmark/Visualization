@@ -114,24 +114,22 @@ const getters = {
         const result = [];
         const years = [2011, 2012, 2013, 2014, 2015];
 
-        console.log("Calculating yearly transfer data for major:", major);
-
         years.forEach(year => {
-            const yearData = state.transferData.filter(d => d.NJ === year);
-            console.log(`Year ${year} data:`, yearData);
+            const yearStr = year.toString();
+            const yearData = state.transferData.filter(d => d.NJ === yearStr);
 
             const inCount = yearData.filter(d => d.NEW_ZYMC === major).length;
             const outCount = yearData.filter(d => d.OLD_ZYMC === major).length;
 
-            console.log(`Year ${year} - In count: ${inCount}, Out count: ${outCount}`);
 
             result.push({ year, inCount, outCount });
         });
 
-        console.log("Final yearly transfer data:", result);
         return result;
     }
+
 };
+
 
 const actions = {
     async fetchTransferData({ commit }) {
@@ -171,6 +169,7 @@ const mutations = {
         state.selectedMajor = major;
     },
 };
+
 
 export default {
     namespaced: true,

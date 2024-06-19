@@ -1,16 +1,22 @@
 <template>
   <div class="chord-container">
+
     <h3>{{ selectedYearForChord }} 届转专业情况</h3>
+
+    <svg ref="chordSvg"></svg>
+
     <div class="years-container">
       <span v-for="year in years" :key="year" @click="changeYear(year)">{{ year }}</span>
     </div>
+
     <div class="timeline-container">
       <input type="range" v-model="year" @input="updateYear" min="2011" max="2015" step="1" list="tickmarks" />
       <datalist id="tickmarks">
         <option v-for="year in years" :key="year" :value="year">{{ year }}</option>
       </datalist>
     </div>
-    <svg ref="chordSvg"></svg>
+
+
   </div>
 </template>
 
@@ -197,6 +203,11 @@ export default {
 </script>
 
 <style scoped>
+h3 {
+  font-weight: bold;
+  margin: 0 0 -5vh 0;
+}
+
 .chord-container {
   display: flex;
   flex-direction: column;
@@ -224,6 +235,7 @@ input[type="range"] {
 svg {
   display: block;
   margin: 0 auto;
+  margin-bottom: -5vh;
 }
 
 path {

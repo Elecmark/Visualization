@@ -1,6 +1,20 @@
 <template>
   <div class="chart-container">
     <h2>{{ selectedMajor }} 专业历年转专业人数变化</h2>
+    <div class="legend">
+      <span class="legend-item">
+        <svg width="10" height="10">
+          <rect width="10" height="10" fill="green"></rect>
+        </svg>
+        转入人数
+      </span>
+      <span class="legend-item">
+        <svg width="10" height="10">
+          <rect width="10" height="10" fill="red"></rect>
+        </svg>
+        转出人数
+      </span>
+    </div>
     <svg ref="lineChartSvg"></svg>
   </div>
 </template>
@@ -39,12 +53,17 @@ export default {
       const data = this.yearlyTransferData;
       console.log("Drawing line chart with data:", data);
 
+      if (!data || data.length === 0) {
+        console.log("No data available for drawing the line chart.");
+        return;
+      }
+
       const svg = d3.select(this.$refs.lineChartSvg)
           .html("") // 清空之前的图表
           .attr("width", 1000)
           .attr("height", 220); // 固定高度
 
-      const margin = { top: 0, right: 0, bottom: 30, left: 0 };
+      const margin = { top: 40, right: 50, bottom: 40, left: 50 };
       const width = +svg.attr("width") - margin.left - margin.right;
       const height = +svg.attr("height") - margin.top - margin.bottom;
 
@@ -111,7 +130,9 @@ export default {
           .attr("class", "label label--in")
           .attr("x", d => x(d.year) + x.bandwidth() / 2)
           .attr("y", d => y(d.inCount) - 5)
-          .attr("text-anchor", "middle")
+          .attr("text-anchor", "end") // 左对齐
+          .attr("dx", "-0.5em") // 向左移动半个字符宽度
+          .attr("fill", "green") // 设置颜色
           .text(d => d.inCount);
 
       g.selectAll(".label--out")
@@ -119,8 +140,10 @@ export default {
           .enter().append("text")
           .attr("class", "label label--out")
           .attr("x", d => x(d.year) + x.bandwidth() / 2)
-          .attr("y", d => y(d.outCount) + 15)
-          .attr("text-anchor", "middle")
+          .attr("y", d => y(d.outCount) - 5)
+          .attr("text-anchor", "start") // 右对齐
+          .attr("dx", "0.5em") // 向右移动半个字符宽度
+          .attr("fill", "red") // 设置颜色
           .text(d => d.outCount);
     }
   }
@@ -139,6 +162,18 @@ h2 {
   text-align: center;
   font-weight: bold;
   margin: 0;
+}
+
+.legend {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 -2vh 0;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin: 0 10px;
 }
 
 svg {
